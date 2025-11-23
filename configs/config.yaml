@@ -7,6 +7,8 @@ data_path: data/sudoku_small.jsonl
 batch_size: 1
 epochs: 10
 H_cycles: 6
+# 1.0 = hard overwrite (current behavior), <1.0 = soft interpolation update
+alpha_blend: 0.3
 learning_rate: 0.001
 grad_accum_steps: 1
 

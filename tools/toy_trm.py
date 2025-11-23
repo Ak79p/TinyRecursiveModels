@@ -3,6 +3,7 @@ import os, json, time
 import torch, torch.nn as nn
 from torch.utils.data import DataLoader
 from pathlib import Path
+from utils.functions import apply_alpha_blend
 
 # Simple dataset (adapted from earlier)
 class SimpleSudokuDataset(torch.utils.data.Dataset):
@@ -55,6 +56,27 @@ def count_changes(prev, curr):
         return (curr != 0).sum().item()
     return (prev != curr).sum().item()
 
+def run_recursive_cycles(model, input_grid, target, H, device, prev_logits, latent, criterion, B, alpha=1.0):
+    cycle_losses = []
+    cycle_preds = []
+    for k in range(H):
+        logits, latent = model.forward_once(input_grid, prev_logits, latent)
+        flat_logits = logits.view(B*81, 9)
+        flat_tgt = (target.view(B*81) - 1).long()
+        loss_k = criterion(flat_logits, flat_tgt.to(flat_logits.device))
+        cycle_losses.append(loss_k)
+        preds = flatten_logits_to_preds(logits).detach().cpu()
+        cycle_preds.append(preds.numpy().tolist())
+        new_flat = logits.detach().view(B, -1).to(device)
+        if prev_logits is None:
+            prev_logits = new_flat
+        else:
+            # alpha blend hook - 1.0 preserves original overwrite behavior
+            prev_logits = apply_alpha_blend(prev_logits, new_flat, alpha)
+    cycle_logs = {'cycle_losses': cycle_losses, 'cycle_preds': cycle_preds}
+    final_pred = cycle_preds[-1] if cycle_preds else None
+    return final_pred, cycle_logs
+
 def run_train(cfg):
     data_path = cfg['data_path']
     ds = SimpleSudokuDataset(data_path)
@@ -69,23 +91,16 @@ def run_train(cfg):
 
     epochs = cfg.get('epochs', 1)
     H = cfg.get('H_cycles', 3)
+    alpha = cfg.get('alpha_blend', 1.0)
     for epoch in range(1, epochs+1):
         for batch_idx, (inp, tgt, ids) in enumerate(loader):
             B = inp.shape[0]
             inp = inp.to(device); tgt = tgt.to(device)
             prev_logits = None
             latent = model.init_latent(B).to(device)
-            cycle_losses = []
-            cycle_preds = []
-            for k in range(H):
-                logits, latent = model.forward_once(inp, prev_logits, latent)
-                flat_logits = logits.view(B*81, 9)
-                flat_tgt = (tgt.view(B*81) - 1).long()
-                loss_k = criterion(flat_logits, flat_tgt.to(flat_logits.device))
-                cycle_losses.append(loss_k)
-                preds = flatten_logits_to_preds(logits).detach().cpu()
-                cycle_preds.append(preds.numpy().tolist())
-                prev_logits = logits.detach().view(B, -1).to(device)
+            final_pred, cycle_logs = run_recursive_cycles(model, inp, tgt, H, device, prev_logits, latent, criterion, B, alpha)
+            cycle_losses = cycle_logs['cycle_losses']
+            cycle_preds = cycle_logs['cycle_preds']
             total_loss = sum(cycle_losses) / len(cycle_losses)
             optim.zero_grad(); total_loss.backward(); optim.step()
             for bi in range(B):
