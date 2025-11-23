@@ -1,0 +1,30 @@
+# Main run configuration
+run_name: toy_trm_sudoku_best
+model: toy        # 'toy' or 'author'
+data_path: data/sudoku_small.jsonl
+
+# Training parameters
+batch_size: 1
+epochs: 10
+H_cycles: 6
+learning_rate: 0.001
+grad_accum_steps: 1
+
+# Model params for toy model
+toy:
+  embed_dim: 16
+  hidden_dim: 64
+
+# Author model parameters (if using author model)
+author:
+  seq_len: 81
+  batch_size: 1
+  H_cycles: 6
+  hidden_size: 64
+  forward_dtype: float32
+
+# Output
+results_dir: results
+plots_dir: plots
+result_filename: "${run_name}.json"
+plot_prefix: "${run_name}"
