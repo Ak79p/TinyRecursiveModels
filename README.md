@@ -1,168 +1,175 @@
-# Less is More: Recursive Reasoning with Tiny Networks
+# Tiny Recursive Model — Toy Sudoku Solver
 
-This is the codebase for the paper: "Less is More: Recursive Reasoning with Tiny Networks". TRM is a recursive reasoning approach that achieves amazing scores of 45% on ARC-AGI-1 and 8% on ARC-AGI-2 using a tiny 7M parameters neural network.
+A simplified, CPU-friendly implementation of the **Tiny Recursive Model (TRM)** architecture for Sudoku.  
+TRM: https://github.com/SamsungSAILMontreal/TinyRecursiveModels
 
-[Paper](https://arxiv.org/abs/2510.04871)
+This project builds a small, understandable baseline that runs on a **MacBook CPU**, enabling experimentation with recursive reasoning before scaling to the full TRM.
 
-### Motivation
+---
 
-Tiny Recursion Model (TRM) is a recursive reasoning model that achieves amazing scores of 45% on ARC-AGI-1 and 8% on ARC-AGI-2 with a tiny 7M parameters neural network. The idea that one must rely on massive foundational models trained for millions of dollars by some big corporation in order to achieve success on hard tasks is a trap. Currently, there is too much focus on exploiting LLMs rather than devising and expanding new lines of direction. With recursive reasoning, it turns out that “less is more”: you don’t always need to crank up model size in order for a model to reason and solve hard problems. A tiny model pretrained from scratch, recursing on itself and updating its answers over time, can achieve a lot without breaking the bank.
+## Features
+- Minimal **Toy TRM** model (Embedding → Encoder → GRUCell → Decoder → Feedback)
+- **Recursive refinement** through H cycles
+- **Offline Sudoku augmentation** (×10)
+- Per-cycle logging: loss, accuracy, changed cells, predictions
+- Config-driven runs (`configs/*.yaml`)
+- Result aggregation via `aggregate_results.py`
 
-This work came to be after I learned about the recent innovative Hierarchical Reasoning Model (HRM). I was amazed that an approach using small models could do so well on hard tasks like the ARC-AGI competition (reaching 40% accuracy when normally only Large Language Models could compete). But I kept thinking that it is too complicated, relying too much on biological arguments about the human brain, and that this recursive reasoning process could be greatly simplified and improved. Tiny Recursion Model (TRM) simplifies recursive reasoning to its core essence, which ultimately has nothing to do with the human brain, does not require any mathematical (fixed-point) theorem, nor any hierarchy.
+---
 
-### How TRM works
+# 1. Run the Project
 
-<p align="center">
-  <img src="https://AlexiaJM.github.io/assets/images/TRM_fig.png" alt="TRM"  style="width: 30%;">
-</p>
-
-Tiny Recursion Model (TRM) recursively improves its predicted answer y with a tiny network. It starts with the embedded input question x and initial embedded answer y and latent z. For up to K improvements steps, it tries to improve its answer y. It does so by i) recursively updating n times its latent z given the question x, current answer y, and current latent z (recursive reasoning), and then ii) updating its answer y given the current answer y and current latent z. This recursive process allows the model to progressively improve its answer (potentially addressing any errors from its previous answer) in an extremely parameter-efficient manner while minimizing overfitting.
-
-### Requirements
-
-- Python 3.10 (or similar)
-- Cuda 12.6.0 (or similar)
-
+### Install dependencies
 ```bash
-pip install --upgrade pip wheel setuptools
-pip install --pre --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu126 # install torch based on your cuda version
-pip install -r requirements.txt # install requirements
-pip install --no-cache-dir --no-build-isolation adam-atan2 
-wandb login YOUR-LOGIN # login if you want the logger to sync results to your Weights & Biases (https://wandb.ai/)
+pip install torch pyyaml tqdm
 ```
 
-### Dataset Preparation
-
+### Train the model
 ```bash
-# ARC-AGI-1
-python -m dataset.build_arc_dataset \
-  --input-file-prefix kaggle/combined/arc-agi \
-  --output-dir data/arc1concept-aug-1000 \
-  --subsets training evaluation concept \
-  --test-set-name evaluation
-
-# ARC-AGI-2
-python -m dataset.build_arc_dataset \
-  --input-file-prefix kaggle/combined/arc-agi \
-  --output-dir data/arc2concept-aug-1000 \
-  --subsets training2 evaluation2 concept \
-  --test-set-name evaluation2
-
-## Note: You cannot train on both ARC-AGI-1 and ARC-AGI-2 and evaluate them both because ARC-AGI-2 training data contains some ARC-AGI-1 eval data
-
-# Sudoku-Extreme
-python dataset/build_sudoku_dataset.py --output-dir data/sudoku-extreme-1k-aug-1000  --subsample-size 1000 --num-aug 1000  # 1000 examples, 1000 augments
-
-# Maze-Hard
-python dataset/build_maze_dataset.py # 1000 examples, 8 augments
+python tools/toy_trm.py configs/config_toy_H2_L2.yaml
 ```
 
-## Experiments
-
-### ARC-AGI-1 (assuming 4 H-100 GPUs):
-
+### Verify results
 ```bash
-run_name="pretrain_att_arc1concept_4"
-torchrun --nproc-per-node 4 --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 pretrain.py \
-arch=trm \
-data_paths="[data/arc1concept-aug-1000]" \
-arch.L_layers=2 \
-arch.H_cycles=3 arch.L_cycles=4 \
-+run_name=${run_name} ema=True
-
+python tools/aggregate_results.py --results-dir results --file <run>.json
 ```
 
-*Runtime:* ~3 days
+# 2. What’s Implemented
 
-### ARC-AGI-2 (assuming 4 H-100 GPUs):
+## Toy TRM Architecture
+- Digit embeddings
+- Linear encoder
+- GRUCell latent state
+- Decoder for 81×9 logits
+- Answer-projection feedback
+- H recursion cycles (default H=2)
 
+## Dataset Augmentation
+Digit remapping, row/column swaps, block permutations → ~990 samples.
+
+## Logging + Metrics
+- Per-cycle accuracy
+- Wrong-cell histograms
+- Puzzle solve rate
+- Overall mean/median cell accuracy
+
+# 3. Current Results Summary
+Training with:
 ```bash
-run_name="pretrain_att_arc2concept_4"
-torchrun --nproc-per-node 4 --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 pretrain.py \
-arch=trm \
-data_paths="[data/arc2concept-aug-1000]" \
-arch.L_layers=2 \
-arch.H_cycles=3 arch.L_cycles=4 \
-+run_name=${run_name} ema=True
-
+epochs: 100
+H_cycles: 2
+embed_dim: 32
+hidden_dim: 128
+optimizer: AdamW
+learning_rate: 1e-4
+weight_decay: 1e-5
+grad_accum_steps: 4
+batch_size: 1
 ```
+Dataset
+- ~990 augmented Sudoku puzzles
+- 10 clean validation puzzles
 
-*Runtime:* ~3 days
-
-### Sudoku-Extreme (assuming 1 L40S GPU):
-
+Results:
 ```bash
-run_name="pretrain_mlp_t_sudoku"
-python pretrain.py \
-arch=trm \
-data_paths="[data/sudoku-extreme-1k-aug-1000]" \
-evaluators="[]" \
-epochs=50000 eval_interval=5000 \
-lr=1e-4 puzzle_emb_lr=1e-4 weight_decay=1.0 puzzle_emb_weight_decay=1.0 \
-arch.mlp_t=True arch.pos_encodings=none \
-arch.L_layers=2 \
-arch.H_cycles=3 arch.L_cycles=6 \
-+run_name=${run_name} ema=True
-
-run_name="pretrain_att_sudoku"
-python pretrain.py \
-arch=trm \
-data_paths="[data/sudoku-extreme-1k-aug-1000]" \
-evaluators="[]" \
-epochs=50000 eval_interval=5000 \
-lr=1e-4 puzzle_emb_lr=1e-4 weight_decay=1.0 puzzle_emb_weight_decay=1.0 \
-arch.L_layers=2 \
-arch.H_cycles=3 arch.L_cycles=6 \
-+run_name=${run_name} ema=True
+mean_cell_acc=0.90
+median=0.901
+puzzles_solved=1/990
+wrong_cell_hist={1: 837, 0: 108, 2: 45}
 ```
+mean_cell_acc: Average % of correctly predicted digits
 
-*Runtime:* < 36 hours
+puzzles_solved: Number of puzzles solved perfectly (all 81 cells)
 
-### Maze-Hard (assuming 4 L40S GPUs):
+wrong_cell_hist:	How many puzzles are off by 1 / 2 / 3… incorrect digits
 
+per_cycle_mean_acc:	Accuracy improvement across recursive cycles
+
+Interpretation:
+- The model is learning strong per-digit accuracy
+- But solving all 81 digits perfectly is a hard threshold
+- The toy TRM lacks deeper recursion and richer latent updates
+- These results are good for CPU experiments
+- Next scaling steps will require GPU + deeper TRM (H=6, L=3)
+
+
+# 4. Code Overview
+## toy_trm.py
+- Loads dataset
+- Runs H-cycle TRM forward pass
+- Computes CE loss per cycle
+- Logs accuracy + predictions
+- Saves JSON results
+
+## aggregate_results.py
+- Reads training JSON
+- Extracts final cell accuracies
+- Computes solve rate + wrong-cell histogram
+
+# 5. How the Code Works
+## Dataset Loader (SimpleSudokuDataset)
+Reads JSONL lines:
 ```bash
-run_name="pretrain_att_maze30x30"
-torchrun --nproc-per-node 4 --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 pretrain.py \
-arch=trm \
-data_paths="[data/maze-30x30-hard-1k]" \
-evaluators="[]" \
-epochs=50000 eval_interval=5000 \
-lr=1e-4 puzzle_emb_lr=1e-4 weight_decay=1.0 puzzle_emb_weight_decay=1.0 \
-arch.L_layers=2 \
-arch.H_cycles=3 arch.L_cycles=4 \
-+run_name=${run_name} ema=True
+{"input": [...], "target": [...], "id": ...}
 ```
+Returns tensors (input, target, id).
 
-*Runtime:* < 24 hours
+## Model (ToyTRM)
+### Architecture Flow
+```bash
+input grid (9×9)
+→ embedding
+→ flatten
+→ linear encoder
+→ GRUCell latent update
+→ linear decoder (predict 81×9 logits)
+→ answer-projection (previous logits → next cycle)
+```
+### Runs for H recursive cycles:
+```bah
+cycle 0: initial guess
+cycle 1: refinement
+...
+```
+Mimics the author’s recursive reasoning.
 
-## Reference
+## Training Loop
+For every sample:
+1. Initialize latent to zeros
+2. Repeat for H cycles:
+  - forward pass
+  - compute cross-entropy loss
+  - store predictions + accuracy
+3. Average losses across cycles
+4. Backpropagate
+5. Save results to JSON
 
-If you find our work useful, please consider citing:
-
-```bibtex
-@misc{jolicoeurmartineau2025morerecursivereasoningtiny,
-      title={Less is More: Recursive Reasoning with Tiny Networks}, 
-      author={Alexia Jolicoeur-Martineau},
-      year={2025},
-      eprint={2510.04871},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2510.04871}, 
+Output format:
+```bash
+{
+  "sample_id": {
+    "cycles": [
+      { "cycle": 0, "loss": ..., "cell_acc": ..., "changed_cells": ... },
+      { "cycle": 1, ... }
+    ]
+  }
 }
 ```
 
-and the Hierarchical Reasoning Model (HRM):
+## Aggregation (aggregate_results.py)
+Reads the output JSON and computes:
+- final cell accuracy
+- cycle-wise mean accuracy
+- wrong-digit histograms
+- puzzle solve rates
+Used for end-of-training evaluation.
 
-```bibtex
-@misc{wang2025hierarchicalreasoningmodel,
-      title={Hierarchical Reasoning Model}, 
-      author={Guan Wang and Jin Li and Yuhao Sun and Xing Chen and Changling Liu and Yue Wu and Meng Lu and Sen Song and Yasin Abbasi Yadkori},
-      year={2025},
-      eprint={2506.21734},
-      archivePrefix={arXiv},
-      primaryClass={cs.AI},
-      url={https://arxiv.org/abs/2506.21734}, 
-}
-```
+# 6. Next Steps (Future Work)
+- Add EMA, weight-decay tuning, grad clipping
+- Increase recursion depth (H=3–6)
+- Implement author’s latent update rule
+- Introduce Sudoku constraint losses
+- Move full training to GPU
+- Attempt to match author-level solve rates
 
-This code is based on the Hierarchical Reasoning Model [code](https://github.com/sapientinc/HRM) and the Hierarchical Reasoning Model Analysis [code](https://github.com/arcprize/hierarchical-reasoning-model-analysis).
+
