@@ -26,7 +26,7 @@ pip install torch pyyaml tqdm
 
 ### Train the model
 ```bash
-python tools/toy_trm.py configs/config_toy_H2_L2.yaml
+python tools/toy_trm.py configs/config.yaml
 ```
 
 ### Verify results
