@@ -31,7 +31,7 @@ python tools/toy_trm.py configs/config.yaml
 
 ### Verify results
 ```bash
-python tools/aggregate_results.py --results-dir results --file <run>.json
+python tools/aggregate_results.py --results-dir results --file results.json
 ```
 
 # 2. What’s Implemented
