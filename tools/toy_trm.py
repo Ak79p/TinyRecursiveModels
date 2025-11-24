@@ -4,7 +4,7 @@ import torch, torch.nn as nn
 from torch.utils.data import DataLoader
 from pathlib import Path
 
-# Simple dataset (adapted from earlier)
+# Simple dataset 
 class SimpleSudokuDataset(torch.utils.data.Dataset):
     def __init__(self, path):
         import json
@@ -20,7 +20,7 @@ class SimpleSudokuDataset(torch.utils.data.Dataset):
         tgt = torch.tensor(obj["target"], dtype=torch.long)
         return inp, tgt, obj["id"]
 
-# Toy TRM class (same as earlier)
+# Toy TRM class 
 class ToyTRM(nn.Module):
     def __init__(self, embed_dim=16, hidden_dim=64):
         super().__init__()

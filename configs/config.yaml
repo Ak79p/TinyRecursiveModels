@@ -1,30 +1,35 @@
 # Main run configuration
-run_name: toy_trm_sudoku_best
+run_name: toy_trm_sudoku_aug_x10
 model: toy        # 'toy' or 'author'
-data_path: data/sudoku_small.jsonl
+data_path: data/sudoku_aug_x10.jsonl    # <- point to the offline-augmented data
+val_path:  data/sudoku_val.jsonl        # <- unaugmented validation split
 
 # Training parameters
 batch_size: 1
-epochs: 10
-H_cycles: 6
-learning_rate: 0.001
-grad_accum_steps: 1
+epochs: 100                   # increased from 10 -> 100 (CPU-friendly, raises training signal)
+H_cycles: 2                   # smaller but proportional recursion; scale to 3 when on GPU
+L_cycles: 2                   # keep symmetric local recursions for toy runs
+learning_rate: 0.0001       # slightly smaller LR
+weight_decay: 0.00001            # use small weight decay (AdamW-like)
+grad_accum_steps: 4           # emulate larger batch without OOM
 
-# Model params for toy model
+# Model params for toy model (increase capacity moderately)
 toy:
-  embed_dim: 16
-  hidden_dim: 64
+  embed_dim: 32
+  hidden_dim: 128
 
-# Author model parameters (if using author model)
+# Author model parameters (if using author model later)
 author:
   seq_len: 81
   batch_size: 1
-  H_cycles: 6
+  H_cycles: 3
   hidden_size: 64
   forward_dtype: float32
 
-# Output
+# Optimization / logging
 results_dir: results
 plots_dir: plots
-result_filename: "${run_name}.json"
+result_filename: "result.json"
 plot_prefix: "${run_name}"
+eval_interval: 1               # evaluate each epoch (on validation set)
+save_best_only: true           # only keep best checkpoint by validation puzzle-solved %
